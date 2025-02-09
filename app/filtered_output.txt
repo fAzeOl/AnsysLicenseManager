@@ -1,0 +1,25 @@
+License: mech_2
+  Total Issued: 3
+  Total Used: 2
+  Users:
+    filipe.azevedo MTS-WKS-49G06.ceiia.com MTS-WKS-49G06.ceiia.com 17684 (v2021.0512) (MTS-SRVLICANS02/1055 282), start Fri 2/7 12:07
+    rui.sgoncalves MTS-WKS-27DW6.ceiia.com MTS-WKS-27DW6.ceiia.com 30156 (v2021.0512) (MTS-SRVLICANS02/1055 1108), start Fri 2/7 12:35
+
+License: ansys
+  Total Issued: 3
+  Total Used: 1
+  Users:
+    tiago.bartolomeu MTS-WKS-28R6L.ceiia.com MTS-WKS-28R6L 28988 (v2023.1025) (MTS-SRVLICANS02/1055 316), start Fri 2/7 19:18
+
+License: preppost
+  Total Issued: 2
+  Total Used: 1
+  Users:
+    mhenriques MTS-WKS-28MT1.ceiia.com MTS-WKS-28MT1.ceiia.com 28144 (v2021.0512) (MTS-SRVLICANS02/1055 1479), start Thu 2/6 21:11
+
+License: anshpc_pack
+  Total Issued: 2
+  Total Used: 1
+  Users:
+    tiago.bartolomeu MTS-WKS-28R6L.ceiia.com MTS-WKS-28R6L.ceiia.com 39880 (v2023.1025) (MTS-SRVLICANS02/1055 198), start Fri 2/7 15:57
+
