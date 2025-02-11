@@ -1,3 +1,4 @@
+import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 from ttkbootstrap import Style
@@ -5,35 +6,63 @@ import subprocess
 import os
 from datetime import datetime
 
-# Paths for scripts and configuration
+# Database setup
+folderPath = "./database"
+if not os.path.exists(folderPath):
+    os.mkdir(folderPath)
+
+db_file = "./database/licenses.db"
+conn = sqlite3.connect(db_file)
+cursor = conn.cursor()
+
+# Create the License table if it doesn't exist
+cursor.execute(''' 
+    CREATE TABLE IF NOT EXISTS License (
+        License TEXT PRIMARY KEY,
+        Name TEXT NOT NULL
+    )
+''')
+
+# Create the Server table if it doesn't exist
+cursor.execute(''' 
+    CREATE TABLE IF NOT EXISTS Server (
+        Server TEXT PRIMARY KEY,
+        Status TEXT NOT NULL
+    )
+''')
+
+# Create the User table if it doesn't exist
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS User (
+        UserName TEXT PRIMARY KEY,
+        Status TEXT NOT NULL
+    )
+''')
+
+conn.commit()
+
+# Paths for scripts
+folderOutput = "./output"
 GET_LICENSE_SCRIPT = "getLicenseStatus.py"
 FILTER_LICENSE_SCRIPT = "filterLicense.py"
-FILTERED_OUTPUT_FILE = "filtered_output.txt"
-LICENSE_FILE = "./additionalInfo/licenses.txt"
-SERVER_FILE = "./additionalInfo/servers.txt"
+FILTERED_OUTPUT_FILE = f"{folderOutput}/filtered_output.txt"
 
-# Ensure additionalInfo directory exists
-os.makedirs("./additionalInfo", exist_ok=True)
-
-
+# GUI Functions
 def run_refresh_sequence():
     """
     Runs the entire refresh sequence: get license status, filter, and display.
     """
     try:
-        # Run getLicenseStatus script
         result = subprocess.run(["python", GET_LICENSE_SCRIPT], capture_output=True, text=True)
         if result.returncode != 0:
             messagebox.showerror("Error", f"Error running '{GET_LICENSE_SCRIPT}':\n{result.stderr}")
             return
 
-        # Run filterLicense script
         result = subprocess.run(["python", FILTER_LICENSE_SCRIPT], capture_output=True, text=True)
         if result.returncode != 0:
             messagebox.showerror("Error", f"Error running '{FILTER_LICENSE_SCRIPT}':\n{result.stderr}")
             return
 
-        # Display the filtered output
         display_filtered_output()
         update_timestamp()
 
@@ -53,29 +82,30 @@ def display_filtered_output():
         with open(FILTERED_OUTPUT_FILE, "r") as file:
             output_content = file.readlines()
 
-        # Clear the previous data in the treeviews
         for item in available_tree.get_children():
             available_tree.delete(item)
         for item in full_tree.get_children():
             full_tree.delete(item)
+        for item in user_tree.get_children():
+            user_tree.delete(item)
 
-        # Parse and display the licenses
         license_data = parse_filtered_output(output_content)
+        active_users = get_active_users()
+
         for lic, data in license_data.items():
             issued = data["issued"]
             used = data["used"]
             status = "Available" if used < issued else "Fully Used"
             color_tag = "green" if used < issued else "red"
-
-            # Insert into the respective tree based on status
             target_tree = available_tree if status == "Available" else full_tree
             parent = target_tree.insert("", "end", values=(lic, f"{used}/{issued}", status), tags=(color_tag,))
 
-            # Add users as expandable children
             for user in data["users"]:
                 target_tree.insert(parent, "end", values=("", user, ""))
 
-        # Style tags for green and red indicators
+                if user in active_users:
+                    user_tree.insert("", "end", values=(user, lic))
+
         available_tree.tag_configure("green", foreground="green")
         full_tree.tag_configure("red", foreground="red")
 
@@ -84,12 +114,8 @@ def display_filtered_output():
 
 
 def parse_filtered_output(lines):
-    """
-    Parse the lines from the filtered output to extract license data.
-    """
     license_data = {}
     current_license = None
-
     for line in lines:
         line = line.strip()
         if line.startswith("License:"):
@@ -97,132 +123,139 @@ def parse_filtered_output(lines):
             if len(parts) == 2:
                 current_license = parts[1]
                 license_data[current_license] = {"issued": 0, "used": 0, "users": []}
-
         elif "Total Issued:" in line:
             license_data[current_license]["issued"] = int(line.split(": ")[1])
-
         elif "Total Used:" in line:
             license_data[current_license]["used"] = int(line.split(": ")[1])
-
         elif line.startswith("Users:"):
             continue
-
         elif current_license and line:
             license_data[current_license]["users"].append(line)
-
     return license_data
 
 
+def get_active_users():
+    """
+    Retrieve the list of active users from the database.
+    """
+    cursor.execute("SELECT UserName FROM User WHERE Status = 'Active'")
+    return [row[0] for row in cursor.fetchall()]
+
+
 def update_timestamp():
-    """
-    Update the timestamp label to show the last refresh time.
-    """
     timestamp_label.config(text=f"Last Refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-
-def load_entries(file_path):
-    """
-    Load entries from the specified file.
-    """
-    if os.path.exists(file_path):
-        with open(file_path, "r") as file:
-            return [line.strip() for line in file if line.strip()]
-    return []
+def load_user_table():
+    cursor.execute("SELECT UserName, Status FROM User")
+    for user, status in cursor.fetchall():
+        user_table.insert("", "end", values=(user, status))
 
 
-def save_entries(file_path, entries):
-    """
-    Save entries back to the specified file.
-    """
-    with open(file_path, "w") as file:
-        file.write("\n".join(entries) + "\n")
+def load_license_table():
+    for item in license_table.get_children():
+        license_table.delete(item)
+    cursor.execute("SELECT License, Name FROM License")
+    for lic, name in cursor.fetchall():
+        license_table.insert("", "end", values=(lic, name))
+
+
+def load_server_table():
+    for item in server_table.get_children():
+        server_table.delete(item)
+    cursor.execute("SELECT Server, Status FROM Server")
+    for server, status in cursor.fetchall():
+        server_table.insert("", "end", values=(server, status))
+
+
+def add_user():
+    user_name = user_entry.get().strip()
+
+    if not user_name:
+        messagebox.showerror("Error", "Please enter a User Name.")
+        return
+
+    try:
+        cursor.execute("INSERT INTO User (UserName, Status) VALUES (?, ?)", (user_name, "Active"))
+        conn.commit()
+        load_user_table()
+        user_entry.delete(0, tk.END)
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Error", "User already exists.")
 
 
 def add_license():
-    """
-    Add a new license to the list and update the file.
-    """
     license_name = license_entry.get().strip()
-    if license_name:
-        licenses = load_entries(LICENSE_FILE)
-        if license_name not in licenses:
-            licenses.append(license_name)
-            save_entries(LICENSE_FILE, licenses)
-            load_license_table()
+    license_owner = name_entry.get().strip()
+
+    if not license_name or not license_owner:
+        messagebox.showerror("Error", "Please enter both License and Name.")
+        return
+
+    try:
+        cursor.execute("INSERT INTO License (License, Name) VALUES (?, ?)", (license_name, license_owner))
+        conn.commit()
+        load_license_table()
         license_entry.delete(0, tk.END)
-    else:
-        messagebox.showerror("Error", "Please enter a valid license name.")
+        name_entry.delete(0, tk.END)
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Error", "License already exists.")
 
 
 def add_server():
-    """
-    Add a new server to the list and update the file.
-    """
-    server_data = server_entry.get().strip()
-    if server_data:
-        servers = load_entries(SERVER_FILE)
-        if server_data not in servers:
-            servers.append(server_data)
-            save_entries(SERVER_FILE, servers)
-            load_server_table()
+    server_name = server_entry.get().strip()
+
+    if not server_name:
+        messagebox.showerror("Error", "Please enter a Server.")
+        return
+
+    try:
+        server_status = "Active"
+        cursor.execute("UPDATE Server SET Status = 'Inactive'")
+        cursor.execute("INSERT OR REPLACE INTO Server (Server, Status) VALUES (?, ?)", (server_name, server_status))
+        conn.commit()
+        load_server_table()
         server_entry.delete(0, tk.END)
-    else:
-        messagebox.showerror("Error", "Please enter a valid server address.")
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Error", "Server already exists.")
+
+
+def delete_user():
+    selected_items = [user_table.item(item)["values"][0] for item in user_table.selection()]
+    if selected_items:
+        for user in selected_items:
+            cursor.execute("DELETE FROM User WHERE UserName = ?", (user,))
+        conn.commit()
+        load_user_table()
 
 
 def delete_license():
-    """
-    Delete selected licenses from the file and GUI.
-    """
     selected_items = [license_table.item(item)["values"][0] for item in license_table.selection()]
     if selected_items:
-        licenses = load_entries(LICENSE_FILE)
-        for item in selected_items:
-            if item in licenses:
-                licenses.remove(item)
-        save_entries(LICENSE_FILE, licenses)
+        for license_id in selected_items:
+            cursor.execute("DELETE FROM License WHERE License = ?", (license_id,))
+        conn.commit()
         load_license_table()
 
 
 def delete_server():
-    """
-    Delete selected servers from the file and GUI.
-    """
     selected_items = [server_table.item(item)["values"][0] for item in server_table.selection()]
     if selected_items:
-        servers = load_entries(SERVER_FILE)
-        for item in selected_items:
-            servers = [s for s in servers if s.lstrip("#") != item]
-        save_entries(SERVER_FILE, servers)
+        for server_id in selected_items:
+            cursor.execute("DELETE FROM Server WHERE Server = ?", (server_id,))
+        conn.commit()
         load_server_table()
 
+def update_server():
+    selected_items = [server_table.item(item)["values"][0] for item in server_table.selection()]
+    if len(selected_items) > 1:
+        messagebox.showerror("Error", "Please select only 1 server.")
+        return
+    if selected_items:
+        cursor.execute("UPDATE Server SET Status = 'Inactive'")
+        cursor.execute("UPDATE Server SET Status = 'Active' WHERE Server = ?", (selected_items[0],))
+        conn.commit()
+        load_server_table()
 
-def load_license_table():
-    """
-    Load licenses into the table.
-    """
-    for item in license_table.get_children():
-        license_table.delete(item)
-    licenses = load_entries(LICENSE_FILE)
-    for lic in licenses:
-        license_table.insert("", "end", values=(lic,))
-
-
-def load_server_table():
-    """
-    Load servers into the table.
-    """
-    for item in server_table.get_children():
-        server_table.delete(item)
-    servers = load_entries(SERVER_FILE)
-    for server in servers:
-        active = "Active" if not server.startswith("#") else "Inactive"
-        server_name = server.lstrip("#")
-        server_table.insert("", "end", values=(server_name, active))
-
-# Remove newline artifacts from license names if any are present
-def sanitize_license_name(license_name):
-    return license_name.replace("\n", "").strip()
 
 # GUI Setup with ttkbootstrap
 style = Style("darkly")
@@ -234,82 +267,118 @@ style.configure("Treeview", rowheight=25)
 style.configure("TNotebook.Tab", font=("Arial", 12))
 root = style.master
 root.title("License Monitor GUI")
-root.geometry("700x750")
+root.geometry("800x750")
 
 notebook = ttk.Notebook(root)
 notebook.pack(fill=tk.BOTH, expand=True)
 
-# Main Tab
 main_frame = ttk.Frame(notebook, padding=10)
 notebook.add(main_frame, text="License Monitor")
 
 refresh_button = ttk.Button(main_frame, text="Refresh", command=run_refresh_sequence)
 refresh_button.pack(pady=5)
 
-# Timestamp label
 timestamp_label = ttk.Label(main_frame, text="")
 timestamp_label.pack(pady=5)
 
+user_label = ttk.Label(main_frame, text="User's Licenses",)
+user_label.pack(anchor=tk.W)
 
-# Treeview for Available Licenses
+user_tree = ttk.Treeview(main_frame, columns=("User", "License Name"), show="headings", height=1.1)
+for col in ("User", "License Name"):
+    user_tree.heading(col, text=col, anchor=tk.W)
+    user_tree.column(col, anchor=tk.W, width=250)
+user_tree.pack(fill=tk.BOTH, expand=True, pady=5)
+
 available_label = ttk.Label(main_frame, text="Available Licenses")
 available_label.pack(anchor=tk.W)
 
-available_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings")
+available_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1)
 for col in ("License Name", "Usage", "Status"):
     anchor_value = tk.W if col == "License Name" else tk.CENTER
     available_tree.heading(col, text=col, anchor=anchor_value)
     available_tree.column(col, anchor=anchor_value, width=200)
 available_tree.pack(fill=tk.BOTH, expand=True, pady=5)
 
-# Treeview for Fully Used Licenses
+
 full_label = ttk.Label(main_frame, text="Fully Used Licenses")
 full_label.pack(anchor=tk.W)
 
-full_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings")
+full_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1)
 for col in ("License Name", "Usage", "Status"):
     anchor_value = tk.W if col == "License Name" else tk.CENTER
     full_tree.heading(col, text=col, anchor=anchor_value)
     full_tree.column(col, anchor=anchor_value)
 full_tree.pack(fill=tk.BOTH, expand=True, pady=5)
 
-# Tab for managing licenses
 license_frame = ttk.Frame(notebook, padding=10)
 notebook.add(license_frame, text="Manage Licenses")
 
 license_entry = ttk.Entry(license_frame)
 license_entry.pack(pady=5)
+license_entry.insert(0, "Enter License")
+
+name_entry = ttk.Entry(license_frame)
+name_entry.pack(pady=5)
+name_entry.insert(0, "Enter Name")
+
 add_license_button = ttk.Button(license_frame, text="Add License", command=add_license)
 add_license_button.pack(pady=5)
 
-license_table = ttk.Treeview(license_frame, columns=("License"), show="headings")
+license_table = ttk.Treeview(license_frame, columns=("License", "Name"), show="headings")
 license_table.heading("License", text="License", anchor="w")
+license_table.heading("Name", text="Name", anchor="w")
 license_table.pack(fill=tk.BOTH, expand=True, pady=5)
-
 
 delete_license_button = ttk.Button(license_frame, text="Delete Selected License", command=delete_license)
 delete_license_button.pack(pady=5)
 
 load_license_table()
 
-# Tab for managing servers
 server_frame = ttk.Frame(notebook, padding=10)
 notebook.add(server_frame, text="Manage Servers")
 
 server_entry = ttk.Entry(server_frame)
 server_entry.pack(pady=5)
+server_entry.insert(0, "Enter Server")
 
 add_server_button = ttk.Button(server_frame, text="Add Server", command=add_server)
 add_server_button.pack(pady=5)
 
 server_table = ttk.Treeview(server_frame, columns=("Server", "Status"), show="headings")
 server_table.heading("Server", text="Server", anchor="w")
-server_table.heading("Status", text="Status")
+server_table.heading("Status", text="Status", anchor="w")
 server_table.pack(fill=tk.BOTH, expand=True, pady=5)
 
 delete_server_button = ttk.Button(server_frame, text="Delete Selected Server", command=delete_server)
 delete_server_button.pack(pady=5)
 
+update_server_status = ttk.Button(server_frame, text="Update Server Status", command=update_server)
+update_server_status.pack(pady=5)
+
 load_server_table()
 
+user_frame = ttk.Frame(notebook, padding=10)
+notebook.add(user_frame, text="Manage Users")
+
+user_entry = ttk.Entry(user_frame)
+user_entry.pack(pady=5)
+user_entry.insert(0, "Enter User Name")
+
+add_user_button = ttk.Button(user_frame, text="Add User", command=add_user)
+add_user_button.pack(pady=5)
+
+user_table = ttk.Treeview(user_frame, columns=("User", "Status"), show="headings")
+user_table.heading("User", text="User", anchor="w")
+user_table.heading("Status", text="Status", anchor="w")
+user_table.pack(fill=tk.BOTH, expand=True, pady=5)
+
+delete_user_button = ttk.Button(user_frame, text="Delete Selected User", command=delete_user)
+delete_user_button.pack(pady=5)
+
+load_user_table()
+
 root.mainloop()
+
+# Close the database connection
+conn.close()
