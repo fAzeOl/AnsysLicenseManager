@@ -9,10 +9,28 @@ def convert_to_sqlite_datetime(start_time_str):
     except ValueError:
         return start_time_str  # If parsing fails, return the original
 
+def get_correct_year(start_date):
+    """
+    Determines the correct year for the given start_date (MM/DD).
+    - If start_date matches today's month and day -> use current year.
+    - If start_date is in the past, check if it's before or on 12/31:
+      - If yes, use last year.
+      - Otherwise, use the current year.
+    """
+    return datetime.now().year
+
+def convert_decimal_hours_to_hm(decimal_hours):
+    hours = int(decimal_hours)  # Get the whole number part (hours)
+    minutes = round((decimal_hours - hours) * 60)  # Convert the fractional part to minutes
+    return hours, minutes
+
 # Database setup
 db_file = "./database/licenses.db"
 conn = sqlite3.connect(db_file)
 cursor = conn.cursor()
+
+#cursor.execute("DROP TABLE IF EXISTS temp_data")
+#conn.commit()
 
 # Create temp_data table if not exists
 cursor.execute('''
@@ -24,8 +42,10 @@ cursor.execute('''
         PID INTEGER,
         Version TEXT,
         Server TEXT,
-        Start TEXT,
-        Duration_Hours REAL
+        Start_day TEXT,
+        Start_date TEXT,
+        Start_time TEXT,
+        Duration_Hours TEXT
     )
 ''')
 conn.commit()
@@ -58,8 +78,9 @@ if not os.path.exists(OUTPUT_FILE):
 # Regex patterns
 license_header_pattern = re.compile(r"Users of (\S+):\s*\(Total of (\d+)\s*licenses? issued;\s*Total of (\d+)\s*licenses? in use\)")
 user_pattern = re.compile(
-    r"(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+\((v\d+\.\d+)\)\s+\(([^)]+)\), start (.+)"
+    r"(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+\((v\d+\.\d+)\)\s+\(([^)]+)\), start (\S+) (\d+/\d+) (\d+:\d+)"
 )
+
 
 
 with open(OUTPUT_FILE, "r") as infile:
@@ -76,13 +97,15 @@ with open(OUTPUT_FILE, "r") as infile:
                 license_data[lic_name]["used"] = int(used)
             else:
                 current_license = None
-            continue
+            continue  # Move to next line after processing license header
 
+        # Process user data only if a valid license is being tracked
         if current_license:
             user_match = user_pattern.match(line.strip())
             if user_match:
-                user, hostname, display, pid, version, server, start_time = user_match.groups()
-                formatted_start_time = convert_to_sqlite_datetime(start_time)
+                user, hostname, display, pid, version, server, start_day, start_date, start_time = user_match.groups()
+
+                # Store data in license_data dictionary
                 license_data[current_license]["users"].append({
                     "User": user,
                     "Hostname": hostname,
@@ -90,20 +113,38 @@ with open(OUTPUT_FILE, "r") as infile:
                     "PID": pid,
                     "Version": version,
                     "Server": server,
-                    "Start": formatted_start_time,
+                    "Start_day": start_day,
+                    "Start_date": start_date,
+                    "Start_time": start_time,
                 })
 
+                print(license_data[current_license]["users"])    
+
+                # Convert start_date and start_time to a full datetime object for duration calculation
                 try:
-                    start_dt = datetime.strptime(formatted_start_time, "%Y-%m-%d %H:%M:%S")
-                    duration_hours = (datetime.now() - start_dt).total_seconds() / 3600
+                    # Get the correct year for the start_date
+                    year = get_correct_year(start_date)
+
+                    # Convert start_date and start_time into a full datetime object
+                    start_dt = datetime.strptime(f"{year}/{start_date} {start_time}", "%Y/%m/%d %H:%M")
+
+                    # Calculate duration in hours
+                    duration_hours_raw = (datetime.now() - start_dt).total_seconds() / 3600
+                    hours, minutes = convert_decimal_hours_to_hm(duration_hours_raw)
+
+                    duration_hours = f"{hours}h {minutes}m"
+
+                    print(year, start_dt, duration_hours, datetime.now())
                 except ValueError:
                     duration_hours = None  # Handle unexpected date format gracefully
-                
+
                 # Insert into database
-                cursor.execute('''INSERT INTO temp_data (License, User, Hostname, Display, PID, Version, Server, Start, Duration_Hours)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                               (current_license, user, hostname, display, pid, version, server, formatted_start_time, duration_hours))
+                cursor.execute('''INSERT INTO temp_data (License, User, Hostname, Display, PID, Version, Server, Start_day, Start_date, Start_time, Duration_Hours)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                               (current_license, user, hostname, display, pid, version, server, start_day, start_date, start_time, duration_hours))
                 conn.commit()
+
+
 
 with open(FILTERED_OUTPUT_FILE, "w") as outfile:
     for lic, data in license_data.items():
@@ -118,8 +159,11 @@ with open(FILTERED_OUTPUT_FILE, "w") as outfile:
             outfile.write(f"    PID: {user['PID']}\n")
             outfile.write(f"    Version: {user['Version']}\n")
             outfile.write(f"    Server: {user['Server']}\n")
-            outfile.write(f"    Start: {user['Start']}\n")
+            outfile.write(f"    Start Day: {user['Start_day']}\n")
+            outfile.write(f"    Start Date: {user['Start_date']}\n")
+            outfile.write(f"    Start Time: {user['Start_time']}\n")
             outfile.write("\n")
+
 
 print("Filtered output has been saved to 'filtered_output.txt'")
 

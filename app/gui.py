@@ -101,7 +101,7 @@ def display_filtered_output():
             parent = target_tree.insert("", "end", values=(lic, f"{used}/{issued}", status), tags=(color_tag,))
 
             for user in data["users"]:
-                target_tree.insert(parent, "end", values=(user["User"], user["Start"], user["Duration_Hours"]))
+                target_tree.insert(parent, "end", values=(user["User"], f"{user['Start_day']} {user['Start_date']} {user['Start_time']}", user["Duration_Hours"]))
 
                 if user["User"] in active_users:
                     user_tree.insert("", "end", values=(user["User"], lic))
@@ -138,7 +138,7 @@ def parse_filtered_output(lines):
     # Now query for users for each license, but only once per license
     for lic in licenses_in_output:
         cursor.execute("""
-            SELECT User, Start, Duration_Hours 
+            SELECT User, Start_day, Start_date, Start_time, Duration_Hours 
             FROM temp_data WHERE License = ?
         """, (lic,))
         users = cursor.fetchall()
@@ -146,8 +146,10 @@ def parse_filtered_output(lines):
         for user in users:
             user_info = {
                 "User": user[0],
-                "Start": user[1],
-                "Duration_Hours": user[2]
+                "Start_day": user[1],
+                "Start_date": user[2],
+                "Start_time": user[3],
+                "Duration_Hours": user[4]
             }
             license_data[lic]["users"].append(user_info)
 
