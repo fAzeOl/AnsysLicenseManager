@@ -101,10 +101,10 @@ def display_filtered_output():
             parent = target_tree.insert("", "end", values=(lic, f"{used}/{issued}", status), tags=(color_tag,))
 
             for user in data["users"]:
-                target_tree.insert(parent, "end", values=("", user, ""))
+                target_tree.insert(parent, "end", values=(user["User"], user["Start"], user["Duration_Hours"]))
 
-                if user in active_users:
-                    user_tree.insert("", "end", values=(user, lic))
+                if user["User"] in active_users:
+                    user_tree.insert("", "end", values=(user["User"], lic))
 
         available_tree.tag_configure("green", foreground="green")
         full_tree.tag_configure("red", foreground="red")
@@ -116,21 +116,41 @@ def display_filtered_output():
 def parse_filtered_output(lines):
     license_data = {}
     current_license = None
+    
+    # Track all licenses to query users for each license only once
+    licenses_in_output = set()
+
+    # First pass to process the lines and identify licenses
     for line in lines:
         line = line.strip()
         if line.startswith("License:"):
             parts = line.split(": ")
             if len(parts) == 2:
                 current_license = parts[1]
-                license_data[current_license] = {"issued": 0, "used": 0, "users": []}
+                licenses_in_output.add(current_license)
+                if current_license not in license_data:
+                    license_data[current_license] = {"issued": 0, "used": 0, "users": []}
         elif "Total Issued:" in line:
             license_data[current_license]["issued"] = int(line.split(": ")[1])
         elif "Total Used:" in line:
             license_data[current_license]["used"] = int(line.split(": ")[1])
-        elif line.startswith("Users:"):
-            continue
-        elif current_license and line:
-            license_data[current_license]["users"].append(line)
+    
+    # Now query for users for each license, but only once per license
+    for lic in licenses_in_output:
+        cursor.execute("""
+            SELECT User, Start, Duration_Hours 
+            FROM temp_data WHERE License = ?
+        """, (lic,))
+        users = cursor.fetchall()
+
+        for user in users:
+            user_info = {
+                "User": user[0],
+                "Start": user[1],
+                "Duration_Hours": user[2]
+            }
+            license_data[lic]["users"].append(user_info)
+
     return license_data
 
 
@@ -257,6 +277,43 @@ def update_server():
         load_server_table()
 
 
+def copy_license_to_clipboard(event, treeview):
+    """
+    Copies the formatted license information to the clipboard for the selected active user.
+    """
+    # Get the item clicked (event.widget refers to the treeview in this case)
+    item = treeview.identify('item', event.x, event.y)  # Identify the item under the cursor
+    if item:
+        # Retrieve the user and license name from the selected item
+        user_name = treeview.item(item, "values")[0]  # Assuming the first column is 'User'
+        license_name = treeview.item(item, "values")[1]  # Assuming the second column is 'License Name'
+        
+        # Query database to retrieve the corresponding data from the 'temp_data' table
+        cursor.execute("""
+            SELECT User, Hostname, Display, PID, Version, Server, Start
+            FROM temp_data
+            WHERE User = ? AND License = ?
+        """, (user_name, license_name))
+        
+        # Fetch the data from the query
+        user_data = cursor.fetchone()
+        
+        if user_data:
+            # Format the data into the required string
+            formatted_text = f"Olá,\n\ntenho a seguinte licença presa:\n"
+            formatted_text += f"\n{license_name} {user_data[0]} {user_data[1]} {user_data[2]} {user_data[3]} ({user_data[4]}) ({user_data[5]}), {user_data[6]}"
+            
+            # Copy the formatted string to the clipboard
+            root.clipboard_clear()
+            root.clipboard_append(formatted_text)
+            root.update()  # Update the clipboard to ensure the content is copied
+            
+            # Optional: Print for confirmation (you can remove this in production)
+            print(f"Copied to clipboard: {formatted_text}")
+        else:
+            messagebox.showerror("Error", "No data found for the selected user/license.")
+
+
 # GUI Setup with ttkbootstrap
 style = Style("darkly")
 style.configure("TLabel", font=("Arial", 12))
@@ -267,7 +324,7 @@ style.configure("Treeview", rowheight=25)
 style.configure("TNotebook.Tab", font=("Arial", 12))
 root = style.master
 root.title("License Monitor GUI")
-root.geometry("800x750")
+root.geometry("825x750")
 
 notebook = ttk.Notebook(root)
 notebook.pack(fill=tk.BOTH, expand=True)
@@ -284,7 +341,9 @@ timestamp_label.pack(pady=5)
 user_label = ttk.Label(main_frame, text="User's Licenses",)
 user_label.pack(anchor=tk.W)
 
-user_tree = ttk.Treeview(main_frame, columns=("User", "License Name"), show="headings", height=1.1)
+user_tree = ttk.Treeview(main_frame, columns=("User", "License Name"), show="headings", height=1.1, selectmode="none")
+user_tree.bind("<Shift-1>", lambda event: copy_license_to_clipboard(event, user_tree))
+
 for col in ("User", "License Name"):
     user_tree.heading(col, text=col, anchor=tk.W)
     user_tree.column(col, anchor=tk.W, width=250)
@@ -293,7 +352,8 @@ user_tree.pack(fill=tk.BOTH, expand=True, pady=5)
 available_label = ttk.Label(main_frame, text="Available Licenses")
 available_label.pack(anchor=tk.W)
 
-available_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1)
+available_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1, selectmode="none")
+available_tree.bind("<Shift-1>", lambda event: copy_license_to_clipboard(event, available_tree))
 for col in ("License Name", "Usage", "Status"):
     anchor_value = tk.W if col == "License Name" else tk.CENTER
     available_tree.heading(col, text=col, anchor=anchor_value)
@@ -304,7 +364,8 @@ available_tree.pack(fill=tk.BOTH, expand=True, pady=5)
 full_label = ttk.Label(main_frame, text="Fully Used Licenses")
 full_label.pack(anchor=tk.W)
 
-full_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1)
+full_tree = ttk.Treeview(main_frame, columns=("License Name", "Usage", "Status"), show="headings", height=1, selectmode="none")
+full_tree.bind("<Shift-1>", lambda event: copy_license_to_clipboard(event, full_tree))
 for col in ("License Name", "Usage", "Status"):
     anchor_value = tk.W if col == "License Name" else tk.CENTER
     full_tree.heading(col, text=col, anchor=anchor_value)
