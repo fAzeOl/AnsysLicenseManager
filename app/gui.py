@@ -10,7 +10,10 @@ import getLicenseStatus
 
 
 class Database:
+    """Handles SQLite database setup, queries, and connection management."""
+
     def __init__(self):
+        """Initializes database connection and ensures necessary tables exist."""
         self.folderPath = "./database"
         self.db_file = "./database/licenses.db"
         self.conn = None
@@ -18,6 +21,7 @@ class Database:
         self.setup_database()
 
     def setup_database(self):
+        """Creates required tables if they do not already exist."""
         if not os.path.exists(self.folderPath):
             os.mkdir(self.folderPath)
 
@@ -49,6 +53,7 @@ class Database:
         self.conn.commit()
 
     def execute_query(self, query, params=None):
+        """Executes a SQL query and returns the fetched results."""
         if params:
             self.cursor.execute(query, params)
         else:
@@ -56,14 +61,19 @@ class Database:
         return self.cursor.fetchall()
 
     def commit(self):
+        """Commits the current transaction."""
         self.conn.commit()
 
     def close(self):
+        """Closes the database connection."""
         self.conn.close()
 
 
 class LicenseMonitorApp:
+    """Main GUI application to monitor, manage, and track licenses."""
+
     def __init__(self, root, db):
+        """Initializes the GUI and database connection."""
         self.root = root
         self.db = db
         self.style = Style("darkly")
@@ -71,10 +81,12 @@ class LicenseMonitorApp:
         self.setup_scripts()
 
     def setup_scripts(self):
+        """Configures output directories and paths for filtered results."""
         self.folderOutput = "./output"
         self.FILTERED_OUTPUT_FILE = f"{self.folderOutput}/filtered_output.txt"
 
     def setup_gui(self):
+        """Configures GUI styles, creates frames, and sets up interface components."""
         self.style.configure("TLabel", font=("Arial", 12))
         self.style.configure("TButton", font=("Arial", 12))
         self.style.configure("Treeview", font=("Arial", 12))
@@ -106,6 +118,7 @@ class LicenseMonitorApp:
         self.setup_user_frame()
 
     def setup_main_frame(self):
+        """Sets up the main dashboard frame with a refresh button and license tables."""
         # Refresh button
         self.refresh_button = ttk.Button(self.main_frame, text="Refresh", command=self.run_refresh_sequence, width=12)
         self.refresh_button.pack(pady=5)
@@ -117,16 +130,19 @@ class LicenseMonitorApp:
         self.setup_license_tables()
     
     def on_focus_in(self, event):
+        """Clears placeholder text when an entry field gains focus."""
         if event.widget.get() == event.widget.placeholder:
             event.widget.delete(0, tk.END)  # Clear the placeholder text
 
     def on_focus_out(self, event):
+        """Restores placeholder text if an entry field is left empty."""
         if not event.widget.get():  # If empty, restore placeholder
             event.widget.insert(0, event.widget.placeholder)
 
     def on_tab_switch(self, event):
+        """Prevents unwanted focus on entry fields when switching tabs."""
         # Set focus to a different widget
-       event.widget.focus()  # Set focus to the frame instead of the entry   
+        event.widget.focus()  # Set focus to the frame instead of the entry   
 
     def copy_license_to_clipboard(self, event, treeview):
         """
@@ -177,6 +193,7 @@ class LicenseMonitorApp:
         conn.close()
 
     def setup_license_tables(self):
+        """Set-up dashboard for licenses - User, Available and Fully"""
         self.user_label = ttk.Label(self.main_frame, text="User's Licenses",)
         self.user_label.pack(anchor=tk.W)
 
@@ -211,6 +228,7 @@ class LicenseMonitorApp:
         self.full_tree.pack(fill=tk.BOTH, expand=True, pady=5)
 
     def setup_license_frame(self):
+        """Set-up tab for managing licenses"""
         # License management GUI
         self.license_entry = ttk.Entry(self.license_frame)
         self.license_entry.pack(pady=5)
@@ -243,6 +261,7 @@ class LicenseMonitorApp:
         self.load_license_table()
 
     def setup_server_frame(self):
+        """Set-up tab for managing server"""
         # Server management GUI
         self.server_entry = ttk.Entry(self.server_frame)
         self.server_entry.pack(pady=5)
@@ -271,6 +290,7 @@ class LicenseMonitorApp:
         self.load_server_table()
 
     def setup_user_frame(self):
+        """Set-up tab for managing users"""
         # User management GUI
         self.user_entry = ttk.Entry(self.user_frame)
         self.user_entry.pack(pady=5)
@@ -296,6 +316,7 @@ class LicenseMonitorApp:
         self.load_user_table()
 
     def run_refresh_sequence(self):
+        """Runs external scripts to refresh license data."""
         try:
             # Run the first script function
             try:
@@ -319,6 +340,7 @@ class LicenseMonitorApp:
             messagebox.showerror("Error", f"Unexpected failure during refresh: {e}")
 
     def display_filtered_output(self):
+        """Displays parsed license data in UI tables."""
         if not os.path.exists(self.FILTERED_OUTPUT_FILE):
             messagebox.showerror("Error", "Filtered output file not found. Please try refreshing.")
             return
@@ -355,6 +377,7 @@ class LicenseMonitorApp:
     
     
     def parse_filtered_output(self, lines):
+        """Parse the filtered data."""
         license_data = {}
         current_license = None
         conn = sqlite3.connect('./database/licenses.db') 
@@ -377,7 +400,7 @@ class LicenseMonitorApp:
                 license_data[current_license]["used"] = int(line.split(": ")[1])
 
         # Query for users per license
-        # Fetch the users for this license (you may already have the SQL logic for this part)
+        # Fetch the users for this license
         
         for lic in licenses_in_output:
             cursor.execute("""
@@ -385,7 +408,7 @@ class LicenseMonitorApp:
                 FROM temp_data WHERE License = ?
             """, (lic,))
             users = cursor.fetchall()
-        # Now append the user information
+        # Append the user information
             for user in users:
                 user_info = {
                     "User": user[0],
@@ -395,16 +418,18 @@ class LicenseMonitorApp:
                     "Duration_Hours": user[4]
                 }
                 license_data[lic]["users"].append(user_info)  # Append the user info to the license
-        conn.close()  # Don't forget to close the connection after you're done
+        conn.close()  # close the connection after done
         return license_data
 
     def get_active_users(self):
         return [row[0] for row in self.db.execute_query("SELECT UserName FROM User WHERE Status = 'Active'")]
 
     def update_timestamp(self):
+        """Updates the last refresh timestamp label."""
         self.timestamp_label.config(text=f"Last Refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     def add_user(self):
+        """Adds a new user to the database."""
         user_name = self.user_entry.get().strip()
         if not user_name:
             messagebox.showerror("Error", "Please enter a User Name.")
@@ -418,24 +443,28 @@ class LicenseMonitorApp:
             messagebox.showerror("Error", "User already exists.")
 
     def load_user_table(self):
-        for item in self.user_table.get_children():
+        """Fill in table with user data"""
+        for item in self.user_table.get_children(): #erase data after refresh from UI
             self.user_table.delete(item)
         for user, status in self.db.execute_query("SELECT UserName, Status FROM User"):
             self.user_table.insert("", "end", values=(user, status))
 
     def load_license_table(self):
+        """Fill in table with license data"""
         for item in self.license_table.get_children():
             self.license_table.delete(item)
         for lic, name in self.db.execute_query("SELECT License, Name FROM License"):
             self.license_table.insert("", "end", values=(lic, name))
 
     def load_server_table(self):
+        """Fill in table with server data"""
         for item in self.server_table.get_children():
             self.server_table.delete(item)
         for server, status in self.db.execute_query("SELECT Server, Status FROM Server"):
             self.server_table.insert("", "end", values=(server, status))
 
     def delete_user(self):
+        """Deletes the selected user from the database."""
         selected_items = [self.user_table.item(item)["values"][0] for item in self.user_table.selection()]
         if selected_items:
             for user in selected_items:
@@ -460,6 +489,7 @@ class LicenseMonitorApp:
             self.load_server_table()
     
     def add_license(self):
+        """Adds a new license to the database."""
         license_id = self.license_entry.get().strip()
         license_name = self.name_entry.get().strip()
 
@@ -493,7 +523,7 @@ class LicenseMonitorApp:
             # Set the status for the new server
             server_status = "Active"
 
-            # Deactivate any other active servers (if needed)
+            # Deactivate any other active servers
             self.db.execute_query("UPDATE Server SET Status = 'Inactive'")
             
             # Insert or update the server in the database
@@ -510,6 +540,7 @@ class LicenseMonitorApp:
             messagebox.showerror("Error", "Server already exists.")
         
     def update_server(self):
+        """Updates the status of the selected server."""
         selected_items = [self.server_table.item(item)["values"][0] for item in self.server_table.selection()]
         
         if len(selected_items) > 1:

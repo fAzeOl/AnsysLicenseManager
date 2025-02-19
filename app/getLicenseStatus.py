@@ -29,7 +29,7 @@ def run_lmutil_command(active_server):
     """Runs the lmutil command and captures its output."""
     command = rf'& "{LMUTIL_PATH}" lmstat -c {active_server} -a'
     try:
-        result = subprocess.run(["powershell.exe", "-Command", command], capture_output=True, text=True)
+        result = subprocess.run(["powershell.exe", "-Command", command], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
         return result.stdout, result.returncode
     except Exception as e:
         print("Error running the command:", e)
