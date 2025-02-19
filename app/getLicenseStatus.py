@@ -2,41 +2,64 @@ import sqlite3
 import subprocess
 import os
 
-# Database setup
-db_file = "./database/licenses.db"
-conn = sqlite3.connect(db_file)
-cursor = conn.cursor()
+DB_FILE = "./database/licenses.db"
+OUTPUT_FOLDER = "./output"
+OUTPUT_FILE = f"{OUTPUT_FOLDER}/output.txt"
+LMUTIL_PATH = r"C:\Program Files\ANSYS Inc\v212\licensingclient\winx64\lmutil.exe"
 
-folderPath = "./output"
+def setup_database():
+    """Connects to the SQLite database."""
+    if not os.path.exists(DB_FILE):
+        print("Database file not found. Please ensure the database exists.")
+        exit(1)
+    return sqlite3.connect(DB_FILE)
 
-if not os.path.exists(folderPath):
-    os.mkdir(folderPath)
+def get_active_server(cursor):
+    """Retrieves the active server from the database."""
+    cursor.execute("SELECT Server FROM Server WHERE Status = 'Active'")
+    active_server_row = cursor.fetchone()
+    return active_server_row[0] if active_server_row else None
 
-# Retrieve the active server from the database
-cursor.execute("SELECT Server FROM Server WHERE Status = 'Active'")
-active_server_row = cursor.fetchone()
-active_server = active_server_row[0] if active_server_row else None
+def ensure_output_directory():
+    """Creates the output directory if it does not exist."""
+    if not os.path.exists(OUTPUT_FOLDER):
+        os.mkdir(OUTPUT_FOLDER)
 
-if not active_server:
-    print("No active server found. Please ensure there is an active server in the database.")
-    exit(1)
+def run_lmutil_command(active_server):
+    """Runs the lmutil command and captures its output."""
+    command = rf'& "{LMUTIL_PATH}" lmstat -c {active_server} -a'
+    try:
+        result = subprocess.run(["powershell.exe", "-Command", command], capture_output=True, text=True)
+        return result.stdout, result.returncode
+    except Exception as e:
+        print("Error running the command:", e)
+        return None, -1
 
-# Properly formatted PowerShell command
-command = rf'& "C:\\Program Files\\ANSYS Inc\\v212\\licensingclient\\winx64\\lmutil.exe" lmstat -c {active_server} -a'
+def save_output_to_file(output):
+    """Writes command output to a file."""
+    with open(OUTPUT_FILE, "w") as file:
+        file.write(output)
 
-try:
-    # Run the command using PowerShell
-    result = subprocess.run(["powershell.exe", "-Command", command], capture_output=True, text=True)
+def main():
+    """Main function to coordinate execution."""
+    conn = setup_database()
+    cursor = conn.cursor()
 
-    # Write the result to a file
-    with open(f"{folderPath}/output.txt", "w") as file:
-        file.write(result.stdout)
+    active_server = get_active_server(cursor)
+    if not active_server:
+        print("No active server found. Please ensure there is an active server in the database.")
+        conn.close()
+        exit(1)
 
-    print("Return Code:", result.returncode)
-    print("Output written to output.txt")
+    ensure_output_directory()
+    output, return_code = run_lmutil_command(active_server)
 
-except Exception as e:
-    print("Error running the command:", e)
+    if output is not None:
+        save_output_to_file(output)
+        #print("Return Code:", return_code)
+        #print(f"Output written to {OUTPUT_FILE}")
 
-# Close the database connection
-conn.close()
+    conn.close()
+
+if __name__ == "__main__":
+    main()
