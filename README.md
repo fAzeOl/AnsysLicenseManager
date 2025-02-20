@@ -1,4 +1,4 @@
-# ANSYS License Monitor GUI 🎛️  
+# ANSYS License Monitor GUI
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange) ![SQLite](https://img.shields.io/badge/SQLite-Database-green)
 
