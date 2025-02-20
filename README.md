@@ -1,4 +1,4 @@
-# ANSYS License Monitor GUI 🎛️  
+# ANSYS License Monitor GUI
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange) ![SQLite](https://img.shields.io/badge/SQLite-Database-green)
 
@@ -29,7 +29,7 @@ It’s a small but useful tool that helps teams work more efficiently with ANSYS
 🔹 **Standalone Executable** – Package the tool into a Windows `.exe` with PyInstaller 
 
 
-## 🏗️ Building a Standalone Application
+## Building a Standalone Application
 To generate a Windows executable using PyInstaller, run:
 
 ``` 
