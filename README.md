@@ -1,4 +1,4 @@
-# ANSYS License Monitor GUI
+# ANSYS License Monitor GUI 🎛️  
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange) ![SQLite](https://img.shields.io/badge/SQLite-Database-green)
 
@@ -14,11 +14,11 @@ The result? A cleaner, more intuitive ANSYS License Monitor that:
 ✅ **Clearly visualizes** which licenses are **in use**, **fully occupied**, or **available**  
 ✅ **Makes it easier for teams** to track license usage and avoid unnecessary delays  
 
-It’s a small but useful tool that helps teams work more efficiently with ANSYS licenses - especially when licenses are limited within the team!  
+It’s a small but useful tool that helps teams work more efficiently with ANSYS licenses - especially when licenses are limited within the team!
 
----
+**Note** - The app works with Windows and was tested on ANSYS 2021R2.
 
-## ✨ Features  
+## Features  
 
 🔹 **Integrated SQLite Database** – Stores license, user, and server information  
 🔹 **Real-time ANSYS License Tracking** – Displays usage in an easy-to-read format  
@@ -28,11 +28,10 @@ It’s a small but useful tool that helps teams work more efficiently with ANSYS
 🔹 **Clipboard Copying** – Copy license details with a simple **Shift + Click**  
 🔹 **Standalone Executable** – Package the tool into a Windows `.exe` with PyInstaller 
 
----
 
-## 🚀 Installation  
+## 🏗️ Building a Standalone Application
+To generate a Windows executable using PyInstaller, run:
 
-### **1. Clone the Repository**  
-```bash
-git clone https://github.com/your-username/ansys-license-monitor.git
-cd ansys-license-monitor
+``` 
+pyinstaller gui.py --onefile --windowed --name AnsysLicenseMonitor
+```
