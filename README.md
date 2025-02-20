@@ -35,3 +35,26 @@ To generate a Windows executable using PyInstaller, run:
 ``` 
 pyinstaller gui.py --onefile --windowed --name AnsysLicenseMonitor
 ```
+
+## How to Use  
+
+1. Add a license in the **Manage Licenses** tab:  
+   - Enter the license and respective name  
+   - Click "Add License"  
+
+2. Add a license server in the **Manage Servers** tab:  
+   - Enter the server address  
+   - Click "Add Server"  
+
+3. Add your user name in the **Manage Users** tab:  
+   - Enter your user name  
+   - Click "Add User"  
+
+All data is stored in the integrated SQLite database, so it will persist between sessions.  
+
+After the initial setup, go to the **License Monitor** tab and click "Refresh".  
+The application will fetch and display:  
+- Who is using each license  
+- Which licenses are fully used  
+- Which licenses are available  
+
