@@ -58,3 +58,6 @@ The application will fetch and display:
 - Which licenses are fully used  
 - Which licenses are available  
 
+## Demo
+
+![ANSYS License Monitor Demo](media/AnsysLicenseManagerApp.gif)
